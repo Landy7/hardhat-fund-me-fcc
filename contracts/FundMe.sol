@@ -16,18 +16,49 @@
 
 //SPDX-License-Identifier: MIT
 pragma solidity ^0.8.8;
-import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
+
+import "./PriceConverter.sol";
+
+//constant and immutable keywords
+
+// deploy 971,870 gas fee ----normal
+// deploy 949,404 gas fee --- using constant type
+
+error NotOwner(); //outside of contract
 
 contract FundMe {
+    using PriceConverter for uint256;
     //每个人都能访问，所以是public
     //payable keyword 会让这个function的button颜色变红，而普通function的颜色是橘色的
     //绿色的function表示状态state。
 
     //using the chainlink and oralces
     //这里是usd
-    uint256 public minimumUsd = 50 * 1e18; //global variables
+    uint256 public constant MINIMUM_USD = 50 * 1e18; //global variables
+    // 307 gas fee --using constant variable
+    // 2407 gas fee --- non constant
 
-    //必须要花钱才能启动该function
+    address[] public funders; //记录donators
+    mapping(address => uint256) public addressToAmountFunded; //记录每个donators对应的捐赠多少钱
+
+    //不会修改
+    address public immutable i_owner; //谁deploy这个contract,谁就是owner
+
+    //需要去重写constructor中的信息
+    //需要和PriceFeed进行interact
+    AggregatorV3Interface public priceFeed;
+
+    //传递参数
+    constructor(address priceFeedAddress) {
+        i_owner = msg.sender; //save gas
+        // 444 gas fee --- immutable
+        // 2580 gas fee --- non-immutable
+        priceFeed = AggregatorV3Interface(priceFeedAddress); //使用传递来的PriceFeedAddress参数作为priceFeed
+    }
+
+    //必须要花钱才能启动该function (payable type)
+    //记录donators and donating currency
+    //people can fund our contract
     function Fund() public payable {
         //want to be able to set the minimum fund amount in USD
         //How do we send Eth to this contract
@@ -37,56 +68,72 @@ contract FundMe {
         //但是因为revert, 下面的代码不会执行, 所以会返回剩余的gas fee.
         //And send the error message.
         //eth转换成usd
+
+        //msg.value.getConversionRate() 与 getConversionRate(msg.value) 的功能一样，
+        //都是传入msg.value进入PriceConverter.sol的getConversionRate()方法。
+        //只有getConversionRate()需要传参数，其他的两个方法都不需要传参数。
+        //这里的msg.value被library视为getConversionRate()的第一个传入的参数。如果该方法还需要传入多个参数
+        //就在该函数括号内添加除需要传入的第一个参数以外的其他参数。
+
+        //现在PriceFeed作为另一个参数传入到getConversionRate()
         require(
-            getConversionRate(msg.value) > minimumUsd,
+            msg.value.getConversionRate(priceFeed) > MINIMUM_USD,
             "Didn't send enough"
         ); // 1 ether = 1*10**18 = 1000000000000000000 wei
+        funders.push(msg.sender); //跟踪哪些用户pay了这个function
+        addressToAmountFunded[msg.sender] = msg.value;
     }
 
-    // need to get the Chainlink price feeds.
-    // to get the contract outside of our project, we need two things:
-    // 1. ABI, 2. contract address
-    function getPrice() public view returns (uint256) {
-        //可以通过contract的interface来获得对应的ABI
-        //然后通过 interface(contract address).function()来获得对应contract里的功能。
-        //ABI
-        //Address: 0x694AA1769357215DE4FAC081bf1f309aDC325306 ---Speoli testnet
-        //返回值不止一个参数
-        AggregatorV3Interface PriceFeed = AggregatorV3Interface(
-            0x694AA1769357215DE4FAC081bf1f309aDC325306
-        );
-        //(uint80 roundId, int256 answer, uint256 startAt, uint256 updatedAt, uint80 answeredInRound)
-        //只需要这一个变量
-        //int256
-        (, int256 answer, , , ) = PriceFeed.latestRoundData();
-        //Eth in terms of USD
-        //8 decimals in priceFeed
-        //这里的priceFeed需要和上面的Fund()的msg.value相match
-        //msg.value为uint256, 所以这里需要类型转换
-        //这里的answer为8位，而eth的位数为18位，所以需要再乘以1e10
-        return uint256(answer * 1e10); //1e10 = 1*10000000000
+    //withdraw the funds out of contracts, use the funds to buy something for this project
+    //withdraw all the funds: addressToAmountFunded are rested to zero.
+    //onlyOwner: 为modifier, 先执行onlyOwner中的语句，再运行该函数中的语句
+    function Withdraw() public onlyOwner {
+        //只有owner才能开启这个方法
+        //require(msg.sender == owner, "only the owner can operate this function");
+        for (uint256 i = 0; i < funders.length; i++) {
+            address funders_address = funders[i];
+            addressToAmountFunded[funders_address] = 0; //所有funder的钱都设置为0
+        }
+        //reset the array
+        //重新定义了一个funders数组来存储funders的address，来替代原来的funders
+        funders = new address[](0);
+        //actually withdraw the funds from contract (把contract的资金都返回给投资人)
+
+        //transfer (simple one)
+        //msg.sender = address
+        //payable(msg.sender) = payable address
+        //需要进行type转换
+        //payable(msg.sender).transfer(address(this).balance);  //获得该sender所捐赠的金额
+
+        //send
+        //bool sendSuccess = payable(msg.sender).send(address(this).balance);  //获得该sender所捐赠的金额
+        //require(sendSuccess,"send fail");
+
+        //call --- low level command
+        //call括号中的“”可以输入information of function
+        //需要像map一样通过key:value的形式来获取该sender发送的金额，并且call value会返回两个参数
+        //这里返回的两个参数分别是 (bool callSuccess, bytes memory datareturns)
+        //datareturns是array, 所以需要memory keyword
+        //这里不需要datareturns, 所以删除
+        (bool callSuccess, ) = payable(msg.sender).call{
+            value: address(this).balance
+        }("");
+        require(callSuccess, "call fail");
     }
 
-    //与chainlink oracle相连
-    function getVersion() public view returns (uint256) {
-        //该contract address是在 Sepolia Testnet,所以部署的链需要选择为speolia testnet
-        AggregatorV3Interface priceFeed = AggregatorV3Interface(
-            0x694AA1769357215DE4FAC081bf1f309aDC325306
-        ); //call this version function on the contracts
-        return priceFeed.version();
+    modifier onlyOwner() {
+        //require(msg.sender == i_owner, NotOwner());
+        if (msg.sender != i_owner) {
+            revert NotOwner(); //直接用error call来进行revert操作
+        } // saving a lot gas
+        _; // the reset of the code inside of the function.
     }
 
-    //ether转成dollars
-    function getConversionRate(
-        uint256 ethAmount
-    ) public view returns (uint256) {
-        uint256 ethPrice = getPrice(); //1eth为多少美元的价格
-        //如果不除以1e18，就会有36位
-        uint256 ethAmountInUsd = (ethPrice * ethAmount) / 1e18;
-        return ethAmountInUsd; //返回的decimal为18位
+    receive() external payable {
+        Fund(); //不小心发送了ETH但是没有点击Fund()function
     }
 
-    // function Withdraw(){
-
-    // }
+    fallback() external payable {
+        Fund(); //输入一些无法解析的CALLDATA会调用fallback
+    }
 }
