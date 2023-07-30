@@ -1,6 +1,3 @@
-//import
-const { network } = require("hardhat"); //与hardhat.config.js进行交互
-
 // function deployFunc(){
 //     console.log("Hi")
 // }
@@ -17,6 +14,12 @@ const { network } = require("hardhat"); //与hardhat.config.js进行交互
 //    const {getNameAccounts, deployments} = hre;
 //}
 
+//引入helper-hardhat-config文件，{}表示 只需要networkConfig这个变量
+const { networkConfig } = require("../helper-hardhat-config");
+const { network } = require("hardhat"); //与hardhat.config.js进行交互
+// const helperConfig = require("../helper-hardhat-config"); //获取 helper-hardhat-config 整个文件
+// const networkConfig = helperConfig.networkConfig; //获取文件中的变量
+
 //使用语法糖，使语句更简短。
 module.exports = async ({ getNameAccounts, deployments }) => {
     //从deployments object 中获得两个functions: deploy, log
@@ -26,6 +29,13 @@ module.exports = async ({ getNameAccounts, deployments }) => {
     const { deployer } = await getNameAccounts();
     //获得chainID
     const chainId = network.config.chainId;
+
+    //因为networkConfig 相当于是 key-value 形式，所以根据chianId就可以得到对应的priceFeed
+    const ethUsdPriceFeedAddress = networkConfig[chainId]["ethUsdPriceFeed"];
+
+    //Mock contract
+    //if the contract doesn't exsit, we deploy the minimal version of
+    //for our local testing
 
     //what happens when we want to change chains?
     //when going for localhost or hardhat network we want to use a mock.
