@@ -7,15 +7,17 @@ require("hardhat-deploy");
 
 const COINMARKETCAP_API_KEY = process.env.COINMARKETCAP_API_KEY || "";
 //需要修改
-const SEPOLIA_RPC_URL =
-    process.env.SEPOLIA_RPC_URL ||
-    "https://eth-sepolia.g.alchemy.com/v2/xk5MLCNT4UM9gHEeeJ2WGD71iIkurDFe";
+const SEPOLIA_RPC_URL = process.env.SEPOLIA_RPC_URL || "";
 
-const PRIVATE_KEY =
-    process.env.PRIVATE_KEY ||
-    "d2a4c2e63bb8b04c64178c4adf41e6ef6062a9f14ba64e93d357a924445882b5";
+const PRIVATE_KEY = process.env.PRIVATE_KEY || "";
 
 const ETHERSCAN_API_KEY = process.env.ETHERSCAN_API_KEY || "";
+
+//一定要设置网关，要不然无法进行verify
+const proxyUrl = "http://127.0.0.1:15236"; // change to yours, With the global proxy enabled, change the proxyUrl to your own proxy link. The port may be different for each client.
+const { ProxyAgent, setGlobalDispatcher } = require("undici");
+const proxyAgent = new ProxyAgent(proxyUrl);
+setGlobalDispatcher(proxyAgent);
 
 /** @type import('hardhat/config').HardhatUserConfig */
 module.exports = {
@@ -31,24 +33,27 @@ module.exports = {
         sepolia: {
             url: SEPOLIA_RPC_URL,
             //这个位置上的account可以有很多个，我们需要用namedAccounts来指定不同角色的account
-            accounts: [],
+            accounts: [PRIVATE_KEY],
             chainId: 11155111,
+            blockConfirmations: 6, //how many blocks we want to wait
         },
     },
     etherscan: {
         apiKey: ETHERSCAN_API_KEY,
     },
     gasReporter: {
-        enabled: true,
+        enabled: false,
         currency: "USD",
         outputFile: "gas-report.txt",
         noColors: true,
+        coinmarketcap: COINMARKETCAP_API_KEY,
+        token: "MATIC",
     },
     namedAccounts: {
         //可以根据不同链不同account来指定deployer
         deployer: {
             default: 0, //给deployer指定account,默认第一个account为deployer account
-            11155111: 1, //指定sepolia testnet的deployer account为第二个account
+            11155111: 0, //指定sepolia testnet的deployer account为第一个account
         },
         //当我们需要测试时，我们也可以设置user account, 比如
         user: {

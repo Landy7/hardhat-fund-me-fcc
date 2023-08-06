@@ -15,8 +15,10 @@
 //Set a minimal funding value in USD
 
 //SPDX-License-Identifier: MIT
+//Pragma
 pragma solidity ^0.8.8;
 
+//imports
 import "./PriceConverter.sol";
 
 //constant and immutable keywords
@@ -24,9 +26,20 @@ import "./PriceConverter.sol";
 // deploy 971,870 gas fee ----normal
 // deploy 949,404 gas fee --- using constant type
 
-error NotOwner(); //outside of contract
+//Error codes
+//命名为 contractName__errorName (这样能够快速定位出现错误的contract在哪)
+error FundMe__NotOwner(); //outside of contract
 
+//Interfaces, libraries, Contracts
+
+/**
+ * @title a contract for crowd funding
+ * @author Randy Lan
+ * @notice This contract is to demo a simple funding contract
+ * @dev This implements price feed as our libraries.
+ */
 contract FundMe {
+    //Type Declaration
     using PriceConverter for uint256;
     //每个人都能访问，所以是public
     //payable keyword 会让这个function的button颜色变红，而普通function的颜色是橘色的
@@ -34,6 +47,7 @@ contract FundMe {
 
     //using the chainlink and oralces
     //这里是usd
+    //State Variables
     uint256 public constant MINIMUM_USD = 50 * 1e18; //global variables
     // 307 gas fee --using constant variable
     // 2407 gas fee --- non constant
@@ -48,6 +62,25 @@ contract FundMe {
     //需要和PriceFeed进行interact
     AggregatorV3Interface public priceFeed;
 
+    //modifier
+    modifier onlyOwner() {
+        //require(msg.sender == i_owner, NotOwner());
+        if (msg.sender != i_owner) {
+            revert FundMe__NotOwner(); //直接用error call来进行revert操作
+        } // saving a lot gas
+        _; // the reset of the code inside of the function.
+    }
+
+    //Functions Order
+    //// constructor
+    //// receive
+    //// fallback
+    //// external
+    //// public
+    //// internal
+    //// private
+    //// view / pure
+
     //传递参数
     constructor(address priceFeedAddress) {
         i_owner = msg.sender; //save gas
@@ -56,6 +89,19 @@ contract FundMe {
         priceFeed = AggregatorV3Interface(priceFeedAddress); //使用传递来的PriceFeedAddress参数作为priceFeed
     }
 
+    receive() external payable {
+        Fund(); //不小心发送了ETH但是没有点击Fund()function
+    }
+
+    fallback() external payable {
+        Fund(); //输入一些无法解析的CALLDATA会调用fallback
+    }
+
+    /**
+     * @notice This function funds this contract.
+     * @dev This implements price feed as our libraries.
+     */
+    //如果有参数或者返回值可以用@param 以及 @return
     //必须要花钱才能启动该function (payable type)
     //记录donators and donating currency
     //people can fund our contract
@@ -119,21 +165,5 @@ contract FundMe {
             value: address(this).balance
         }("");
         require(callSuccess, "call fail");
-    }
-
-    modifier onlyOwner() {
-        //require(msg.sender == i_owner, NotOwner());
-        if (msg.sender != i_owner) {
-            revert NotOwner(); //直接用error call来进行revert操作
-        } // saving a lot gas
-        _; // the reset of the code inside of the function.
-    }
-
-    receive() external payable {
-        Fund(); //不小心发送了ETH但是没有点击Fund()function
-    }
-
-    fallback() external payable {
-        Fund(); //输入一些无法解析的CALLDATA会调用fallback
     }
 }

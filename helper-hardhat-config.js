@@ -17,6 +17,13 @@ const networkConfig = {
     //31337 - hardhat network chainID
 };
 
+const developmentChains = ["hardhat", "localhost"];
+const DECIMALS = 8; //位数
+const INITIAL_ANSWER = 200000000000; //2000*8位数
+
 module.exports = {
     networkConfig,
+    developmentChains,
+    DECIMALS,
+    INITIAL_ANSWER,
 };
